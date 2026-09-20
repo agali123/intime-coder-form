@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>INtime Prompt Generator - Form Building (v1248)</title>
+<title>INtime Prompt Generator - Form Building (v1249)</title>
 <style>
 /* v99 */
 #approveGate { margin-top: 14px; }
@@ -2029,7 +2029,7 @@ function formSealAfterSave(fileName, closingHtml) {
    card's content in place (same panel, so nothing of the page shows through), speaks the
    sentence with the link's words, counts 10 s, then tries to close the page. A press
    stops the count; evalLinkClicked() (v237) opens TenAsys, tells the vendor, closes. */
-var SEAL2_SECONDS = 10;
+var SEAL2_SECONDS = 20;   /* v1249: was 10; Assaf, 2026-09-20: ten seconds more to press the registration link */
 var SEAL2_TIMER = 0;
 function formSealScreen2(card) {
   if (!card) { return; }
@@ -2056,7 +2056,7 @@ function formSealScreen2(card) {
       ivSay('If you have a licensed eentime and Visual Studio, you can take the solution from the ZIP, build it, '
           + 'change it, and run it. If not, we recommend registering for evaluation eentime: please press the link '
           + 'on screen for the evaluation software and a one month license. '
-          + 'If you do nothing, this page closes in ten seconds.');
+          + 'If you do nothing, this page closes in twenty seconds.');
     }
   } catch (e) { }
   SEAL2_TIMER = setInterval(function () {
@@ -13433,7 +13433,7 @@ function downloadTextFile(filename, text, mimeType) {
    cannot be forgotten on the next one. `version: 36` beside it is the SCHEMA
    and says nothing about the HTML; without this, a file that arrives can only
    be dated by guessing from its contents. */
-var FORM_VERSION = 'v1248';
+var FORM_VERSION = 'v1249';
 
 /* v112: emptying the box gives him our summary back on the next press, so
    the edit is reversible without a second control to explain. */
