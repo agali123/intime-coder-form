@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>INtime Prompt Generator - Form Building (v1249)</title>
+<title>INtime Prompt Generator - Form Building (v1250)</title>
 <style>
 /* v99 */
 #approveGate { margin-top: 14px; }
@@ -1684,8 +1684,16 @@ try {
     }).catch(function () { });
   }
 } catch (e) { }
-function doorFetchStatus(cb) {
+function doorFetchStatus(cb, attempt) {
   if (!doorServed() && !doorWeb()) { cb(null); return; }
+  attempt = attempt || 1;
+  /* v1250: the web gate gets ONE more try 1.5 s later - a Google error page in place of the
+     JSON was measured once in four probes, and one blip must not turn the door into the
+     mail-back screen */
+  var fail = function () {
+    if (!doorServed() && attempt < 2) { setTimeout(function () { doorFetchStatus(cb, attempt + 1); }, 1500); return; }
+    cb(null);
+  };
   try {
     var p = doorServed()
       ? fetch('/api/status', { cache: 'no-store' })
@@ -1694,11 +1702,11 @@ function doorFetchStatus(cb) {
       .then(function (j) {
         /* a status is an object with a boolean ok; anything else (an older endpoint's text,
            a login page) is not a gate, and the page stays as it was */
-        if (!j || typeof j.ok !== 'boolean') { cb(null); return; }
+        if (!j || typeof j.ok !== 'boolean') { fail(); return; }
         DOOR_STATUS = j; cb(j);
       })
-      .catch(function () { cb(null); });
-  } catch (e) { cb(null); }
+      .catch(fail);
+  } catch (e) { fail(); }
 }
 try { if (doorServed()) { doorFetchStatus(function () { }); } } catch (e) { }
 
@@ -13433,7 +13441,7 @@ function downloadTextFile(filename, text, mimeType) {
    cannot be forgotten on the next one. `version: 36` beside it is the SCHEMA
    and says nothing about the HTML; without this, a file that arrives can only
    be dated by guessing from its contents. */
-var FORM_VERSION = 'v1249';
+var FORM_VERSION = 'v1250';
 
 /* v112: emptying the box gives him our summary back on the next press, so
    the edit is reversible without a second control to explain. */
