@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>INtime Prompt Generator - Form Building (v1252)</title>
+<title>INtime Prompt Generator - Form Building (v1253)</title>
 <style>
 /* v99 */
 #approveGate { margin-top: 14px; }
@@ -1791,28 +1791,45 @@ function formSealScreen2(card) {
   card.appendChild(tick);
   var left = SEAL2_SECONDS;
   tick.textContent = 'If you do nothing, this page closes in ' + left + ' seconds.';
+  /* v1253: THE COUNT STARTS WHEN THE VOICE HAS SAID "THIRTY SECONDS" (Assaf, 2026-09-20). The
+     sentence takes about fifteen seconds and that clause is its last; counting from the
+     moment the screen appeared made the screen read fifteen while the voice said thirty. So
+     the interval starts from ivSay's onDone - at once when the voice is off - and a guard
+     starts it anyway after 45 s, so a voice that never reports (a held sentence on a phone
+     nobody taps) cannot keep the page open for ever. The number stays at 30 until then. */
+  var started = false;
+  var guard = 0;
+  var startCount = function () {
+    if (started || SEAL2_TIMER === -1) { return; }   /* -1: the link was pressed meanwhile (evalLinkClicked) */
+    started = true;
+    if (guard) { clearTimeout(guard); guard = 0; }
+    SEAL2_TIMER = setInterval(function () {
+      left -= 1;
+      if (left > 0) {
+        tick.textContent = 'If you do nothing, this page closes in ' + left + (left === 1 ? ' second.' : ' seconds.');
+        return;
+      }
+      clearInterval(SEAL2_TIMER); SEAL2_TIMER = 0;
+      tick.textContent = 'Closing this page.';
+      try { window.close(); } catch (e) { }
+      /* v201's lesson: a tab script did not open ignores close(). Say so, keep the link. */
+      setTimeout(function () {
+        tick.innerHTML = '<b>This window could not close itself - please close it.</b> The link above still works.';
+      }, 700);
+    }, 1000);
+  };
+  guard = setTimeout(startCount, 45000);
+  var spoken = false;
   try {
     if (typeof ivSay === 'function') {
+      spoken = true;
       ivSay('If you have a licensed eentime and Visual Studio, you can take the solution from the ZIP, build it, '
           + 'change it, and run it. If not, we recommend registering for evaluation eentime: please press the link '
           + 'on screen for the evaluation software and a one month license. '
-          + 'If you do nothing, this page closes in thirty seconds.');
+          + 'If you do nothing, this page closes in thirty seconds.', startCount);
     }
   } catch (e) { }
-  SEAL2_TIMER = setInterval(function () {
-    left -= 1;
-    if (left > 0) {
-      tick.textContent = 'If you do nothing, this page closes in ' + left + (left === 1 ? ' second.' : ' seconds.');
-      return;
-    }
-    clearInterval(SEAL2_TIMER); SEAL2_TIMER = 0;
-    tick.textContent = 'Closing this page.';
-    try { window.close(); } catch (e) { }
-    /* v201's lesson: a tab script did not open ignores close(). Say so, keep the link. */
-    setTimeout(function () {
-      tick.innerHTML = '<b>This window could not close itself - please close it.</b> The link above still works.';
-    }, 700);
-  }, 1000);
+  if (!spoken) { startCount(); }
 }
 
 /* v226: the evaluation link carries who he is, and a click leaves a mark in the file.
@@ -1864,7 +1881,7 @@ function evalNotify() {
 /* the press: the anchor itself opens TenAsys (target _blank); this tells the vendor and closes */
 function evalLinkClicked() {
   var how = 'none';
-  try { if (SEAL2_TIMER) { clearInterval(SEAL2_TIMER); SEAL2_TIMER = 0; } } catch (e) { }   /* v239 */
+  try { if (SEAL2_TIMER > 0) { clearInterval(SEAL2_TIMER); } SEAL2_TIMER = -1; } catch (e) { }   /* v239; v1253: -1 = pressed, no count may start after this */
   try { how = evalNotify(); } catch (e) { }
   try {
     var el = document.getElementById('sealEval') || document.getElementById('evalLine');   /* v239: the panel's block first */
@@ -13173,7 +13190,7 @@ function downloadTextFile(filename, text, mimeType) {
    cannot be forgotten on the next one. `version: 36` beside it is the SCHEMA
    and says nothing about the HTML; without this, a file that arrives can only
    be dated by guessing from its contents. */
-var FORM_VERSION = 'v1252';
+var FORM_VERSION = 'v1253';
 
 /* v112: emptying the box gives him our summary back on the next press, so
    the edit is reversible without a second control to explain. */
@@ -15516,28 +15533,34 @@ function ivVoiceFor(lang) {
   return null;
 }
 
-function ivSay(text) {
+/* v1253: onDone - called ONCE when the sentence has been said: the clip's end, the
+   utterance's end or error, or at once when the voice is off or there is none. A
+   screen that counts down from a number the voice says must start counting when the
+   voice has said it (Assaf, 2026-09-20). */
+function ivSay(text, onDone) {
   var box = document.getElementById('ivSpeak');
-  if (!box || !box.checked) { return; }
+  if (!box || !box.checked) { if (onDone) { setTimeout(onDone, 0); } return; }
   var spoken = ivSpoken(text);
   /* v1247: before the first tap nothing can be played, so the sentence is held
      and the tap plays it - see voiceOnFirstTap. Not dropped: the first question
      is the one that tells him the form talks at all. */
   if (!voiceActive()) {
-    voiceHold(spoken, function () { ivSayNow(spoken); });
+    voiceHold(spoken, function () { ivSayNow(spoken, onDone); });
     return;
   }
-  ivSayNow(spoken);
+  ivSayNow(spoken, onDone);
 }
 
-function ivSayNow(spoken) {
+function ivSayNow(spoken, onDone) {
+  var reported = false;
+  var done = function () { if (reported) { return; } reported = true; if (onDone) { try { onDone(); } catch (e) { } } };
 
   /* v87: WHAT WE SHIPPED, FIRST. The fixed questions and the three reasons the
      form gives when it corrects a number are in the file, so they are heard on
      a machine with no synthesiser at all - which is the whole point of the
      embedded audio. */
   var synth = function () {
-    if (!('speechSynthesis' in window)) { return; }
+    if (!('speechSynthesis' in window)) { done(); return; }
     var v = ivVoiceFor(IV_LANG);
     /* No voice for this language is NOT a failure to hide - the transcript
        already carries every word, and pretending otherwise would leave a
@@ -15553,12 +15576,13 @@ function ivSayNow(spoken) {
       var u = new SpeechSynthesisUtterance(spoken);
       if (v) { u.voice = v; u.lang = v.lang; }
       u.rate = 0.98;
+      u.onend = done; u.onerror = done;   /* v1253: a cancelled utterance reports too - the screen it belonged to is gone */
       VOICE_PENDING = setTimeout(function () {
         VOICE_PENDING = 0;
         try { speechSynthesis.resume(); } catch (e) { }
-        try { speechSynthesis.speak(u); } catch (e) { }
+        try { speechSynthesis.speak(u); } catch (e) { done(); }
       }, 60);
-    } catch (e) { }
+    } catch (e) { done(); }
   };
 
   /* Anything already speaking stops, whichever kind it was - two voices at
@@ -15576,12 +15600,12 @@ function ivSayNow(spoken) {
   var onRefused = function (err) {
     if (err && err.name === 'NotAllowedError' && !VOICE_HELD) {
       VOICE_UNLOCKED = false;
-      voiceHold(spoken, function () { ivSayNow(spoken); });
+      voiceHold(spoken, function () { ivSayNow(spoken, onDone); });
       return;
     }
     synth();
   };
-  if (voicePlayClip(spoken, null, onRefused)) { return; }
+  if (voicePlayClip(spoken, done, onRefused)) { return; }
   synth();
 }
 
