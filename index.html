@@ -1675,8 +1675,12 @@ try {
     fetch('gate.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
       if (!j || !j.url) { return; }
       WEB_DOOR.url = String(j.url);
-      doorFetchStatus(function () { });
-      if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', doorWords); } else { doorWords(); }
+      /* the words change only once the gate has actually answered - a gate.json that names a
+         URL which is not (yet) a gate must leave the page exactly as it was */
+      doorFetchStatus(function (st) {
+        if (!st) { WEB_DOOR.url = ''; return; }
+        if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', doorWords); } else { doorWords(); }
+      });
     }).catch(function () { });
   }
 } catch (e) { }
