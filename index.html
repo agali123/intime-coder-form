@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>INtime Prompt Generator - Form Building (v1247)</title>
+<title>INtime Prompt Generator - Form Building (v1248)</title>
 <style>
 /* v99 */
 #approveGate { margin-top: 14px; }
@@ -1663,11 +1663,36 @@ function doorServed() {
   try { return (location.protocol === 'http:') && (location.hostname === '127.0.0.1' || location.hostname === 'localhost'); }
   catch (e) { return false; }
 }
+/* v1248: THE SECOND WAY IN - A WEB GATE. Served over https (the phone's address), the page
+   reads gate.json beside itself; when it names a URL, that URL answers ?action=status like
+   the kit's /api/status and takes the form as a POST like /api/submit, relaying both to the
+   bench. The URL lives in gate.json, not here, so the vendor's deployment never needs a form
+   version. No gate.json, or one that does not answer status as JSON: no door, as before. */
+var WEB_DOOR = { url: '' };
+function doorWeb() { return !!WEB_DOOR.url; }
+try {
+  if (location.protocol === 'https:' && !doorServed()) {
+    fetch('gate.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.url) { return; }
+      WEB_DOOR.url = String(j.url);
+      doorFetchStatus(function () { });
+      if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', doorWords); } else { doorWords(); }
+    }).catch(function () { });
+  }
+} catch (e) { }
 function doorFetchStatus(cb) {
-  if (!doorServed()) { cb(null); return; }
+  if (!doorServed() && !doorWeb()) { cb(null); return; }
   try {
-    fetch('/api/status', { cache: 'no-store' }).then(function (r) { return r.json(); })
-      .then(function (j) { DOOR_STATUS = j; cb(j); })
+    var p = doorServed()
+      ? fetch('/api/status', { cache: 'no-store' })
+      : fetch(WEB_DOOR.url + (WEB_DOOR.url.indexOf('?') < 0 ? '?' : '&') + 'action=status&t=' + Date.now(), { cache: 'no-store', redirect: 'follow' });
+    p.then(function (r) { return r.json(); })
+      .then(function (j) {
+        /* a status is an object with a boolean ok; anything else (an older endpoint's text,
+           a login page) is not a gate, and the page stays as it was */
+        if (!j || typeof j.ok !== 'boolean') { cb(null); return; }
+        DOOR_STATUS = j; cb(j);
+      })
       .catch(function () { cb(null); });
   } catch (e) { cb(null); }
 }
@@ -1684,7 +1709,7 @@ function doorWords() {
     var note = document.querySelector('p.pressNote');
     if (note) {
       note.innerHTML = '<b>The button saves the file; then this form sends it.</b> It shows a short summary of what we ' +
-        'understood &ndash; that summary is all we need &ndash; saves your answers as one file on this PC, and asks whether to ' +
+        'understood &ndash; that summary is all we need &ndash; saves your answers as one file on this ' + (doorWeb() ? 'device' : 'PC') + ', and asks whether to ' +
         'send it to the bench. The bench builds your solution, runs it on real INtime nodes, films the screens, puts ' +
         '<b>one ZIP</b> in the Drive folder shared with your e-mail address and <b>e-mails you its link</b> &ndash; depending ' +
         'on other pending requests. Nothing stays open here.';
@@ -1722,7 +1747,7 @@ function doorWords() {
 try { if (doorServed()) { if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', doorWords); } else { doorWords(); } } } catch (e) { }
 
 function formDoorAfterSave(fileName, closingHtml) {
-  if (!doorServed()) { formSealAfterSave(fileName, closingHtml); return; }
+  if (!doorServed() && !doorWeb()) { formSealAfterSave(fileName, closingHtml); return; }
   doorFetchStatus(function (st) {
     if (!st) { formSealAfterSave(fileName, closingHtml); return; }
     formDoorPanel(fileName, st);
@@ -1741,7 +1766,7 @@ function formDoorPanel(fileName, st) {
   var card = document.createElement('div');
   card.className = 'sealCard';
   var h = document.createElement('h2');
-  h.textContent = 'Your request is saved on your computer.';
+  h.textContent = doorWeb() ? 'Your request is saved on this device.' : 'Your request is saved on your computer.';
   card.appendChild(h);
   var f = document.createElement('p');
   f.innerHTML = '<code>' + escapeHtml(fileName || '') + '</code>';
@@ -1804,7 +1829,14 @@ function formDoorPanel(fileName, st) {
     prog.style.display = '';
     document.getElementById('doorLog').style.display = 'none';
     document.getElementById('doorPhase').textContent = 'Sending to the bench...';
-    fetch('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ form: form }) })
+    /* v1248: the kit's own API when served by the kit; the web gate otherwise. The gate's POST
+       goes as text/plain so the browser sends it without a preflight (Apps Script answers none);
+       the body is the same JSON. */
+    var sendP = doorServed()
+      ? fetch('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ form: form }) })
+      : fetch(WEB_DOOR.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, redirect: 'follow',
+                              body: JSON.stringify({ event: 'submit', form: form }) });
+    sendP
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j || !j.job) { throw new Error((j && j.error) || 'the bench did not take the request'); }
@@ -1812,8 +1844,8 @@ function formDoorPanel(fileName, st) {
         q.style.display = 'none'; prog.style.display = 'none';
         done.style.display = '';
         done.innerHTML = '<b>Sent. The bench has your request (job ' + escapeHtml(j.job) + ').</b><br><br>' +
-                         '<b>Your request on this PC:</b><br><code>' + escapeHtml(j.request || '') + '</code><br>' +
-                         '<span class="small">(a folder window opened on it)</span><br><br>' +
+                         (j.request ? ('<b>Your request on this PC:</b><br><code>' + escapeHtml(j.request || '') + '</code><br>' +
+                                       '<span class="small">(a folder window opened on it)</span><br><br>') : '') +
                          '<b>Your solution:</b> <code>' + escapeHtml(j.zip || '') + '</code><br>' +
                          escapeHtml(j.mailLine || ('its link will be e-mailed to ' + (j.email || 'you') + ' once the ZIP is in the Drive folder shared with your e-mail address - depending on other pending requests')) + '<br>' +
                          '<span class="small">One ZIP. Inside: the solution for Visual Studio 2019 and 2022, and the narrated recording of the screens. With INtime and Visual Studio, run it; without them, watch the recording.</span>';
@@ -2460,7 +2492,7 @@ async function portalHandOff() {
       /* v225: what he receives, said right - the ZIP's two halves and which case each is for */
       el.innerHTML += '<br><br><b>That is everything we need.</b> You will receive an ' +
         'email at <b>' + escapeHtml(idVal('idEmail')) + '</b> with ' +
-        ((typeof doorServed === 'function' && doorServed()) ? 'the link to one ZIP in the Drive folder shared with that address: ' : 'a ZIP: ') +
+        ((typeof doorServed === 'function' && (doorServed() || (typeof doorWeb === 'function' && doorWeb()))) ? 'the link to one ZIP in the Drive folder shared with that address: ' : 'a ZIP: ') +
         '<b>your solution for ' +
         'Visual Studio 2019 and 2022</b>, for when you have an INtime development environment ' +
         '&ndash; and <b>a recording of the screens</b> of the computer that ran your application, ' +
@@ -13397,7 +13429,7 @@ function downloadTextFile(filename, text, mimeType) {
    cannot be forgotten on the next one. `version: 36` beside it is the SCHEMA
    and says nothing about the HTML; without this, a file that arrives can only
    be dated by guessing from its contents. */
-var FORM_VERSION = 'v1247';
+var FORM_VERSION = 'v1248';
 
 /* v112: emptying the box gives him our summary back on the next press, so
    the edit is reversible without a second control to explain. */
