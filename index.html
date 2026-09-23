@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>INtime Prompt Generator - Form Building (v1253)</title>
+<title>INtime Prompt Generator - Form Building (v1254)</title>
 <style>
 /* v99 */
 #approveGate { margin-top: 14px; }
@@ -1829,12 +1829,42 @@ function formDoorPanel(fileName, st) {
   try { window.scrollTo(0, 0); } catch (e) { }
   try { if (typeof ivSay === 'function') { ivSay('Your request is saved on your computer. Send it to the bench for processing now? Press yes, and the solution will come to you by e-mail.'); } } catch (e) { }
 
+  /* v1254: A "NO" THAT CAN BE TAKEN BACK (Assaf, 2026-09-24: "when I mistakenly skipped the
+     sending to the bench - I could not recover and correct"). Until now No hid the question,
+     told him to open the form again - the whole interview, a second time - and closed the page
+     four seconds later. Now the question can be put back, nothing closes while that button is
+     on screen, and the fallback for a page he does let close is NAMED. */
+  var doorNoTick = 0;
   document.getElementById('doorNo').onclick = function () {
     q.style.display = 'none';
     done.style.display = '';
-    done.innerHTML = '<b>Kept on this PC, not sent.</b> Open the form from the kit again when you want it processed, or send the file the way you were told.';
-    try { if (typeof ivSay === 'function') { ivSay('Kept on your computer, not sent.'); } } catch (e) { }
-    setTimeout(function () { formSealScreen2(card); }, 4000);
+    var later = doorServed()
+      ? 'To send it later without answering the form again: drag the saved file onto <code>INtime Coder.cmd</code> in your kit folder.'
+      : 'This page cannot send a file it did not just make, so keep that file - it is your request, and it can be mailed in.';
+    done.innerHTML = '<b>Kept on this ' + (doorWeb() ? 'device' : 'PC') + ', not sent.</b> Nothing has gone to the bench.' +
+      '<div style="margin-top:12px"><button id="doorUndo" style="font-size:16px;font-weight:700;padding:8px 18px;' +
+      'background:#1F4E79;color:#fff;border:0;border-radius:6px">I changed my mind &ndash; send it now</button></div>' +
+      '<div id="doorUndoTick" class="small" style="margin-top:8px"></div>' +
+      '<div class="small" style="margin-top:6px">' + later + '</div>';
+    try { if (typeof ivSay === 'function') { ivSay('Kept, not sent. If that was a mistake, press the button: I changed my mind, send it now.'); } } catch (e) { }
+    var left = 60;
+    var tickEl = document.getElementById('doorUndoTick');
+    var word = function (n) { return 'This page closes in ' + n + (n === 1 ? ' second' : ' seconds') + ' - the button above works until then.'; };
+    tickEl.textContent = word(left);
+    doorNoTick = setInterval(function () {
+      left -= 1;
+      if (left > 0) { tickEl.textContent = word(left); return; }
+      clearInterval(doorNoTick); doorNoTick = 0;
+      formSealScreen2(card);
+    }, 1000);
+    document.getElementById('doorUndo').onclick = function () {
+      if (doorNoTick) { clearInterval(doorNoTick); doorNoTick = 0; }
+      done.style.display = 'none'; done.innerHTML = '';
+      q.style.display = '';
+      document.getElementById('doorYes').disabled = false;
+      document.getElementById('doorNo').disabled = false;
+      try { if (typeof ivSay === 'function') { ivSay('Good. Send this request to the bench for processing now?'); } } catch (e) { }
+    };
   };
   document.getElementById('doorYes').onclick = function () {
     var form = collectFilledForm();
@@ -13459,7 +13489,7 @@ function downloadTextFile(filename, text, mimeType) {
    cannot be forgotten on the next one. `version: 36` beside it is the SCHEMA
    and says nothing about the HTML; without this, a file that arrives can only
    be dated by guessing from its contents. */
-var FORM_VERSION = 'v1253';
+var FORM_VERSION = 'v1254';
 
 /* v112: emptying the box gives him our summary back on the next press, so
    the edit is reversible without a second control to explain. */
