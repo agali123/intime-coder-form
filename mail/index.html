@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>INtime Prompt Generator - Form Building (v1254)</title>
+<title>INtime Prompt Generator - Form Building (v1255)</title>
 <style>
 /* v99 */
 #approveGate { margin-top: 14px; }
@@ -1769,7 +1769,8 @@ function formSealAfterSave(fileName, closingHtml) {
    card's content in place (same panel, so nothing of the page shows through), speaks the
    sentence with the link's words, counts 10 s, then tries to close the page. A press
    stops the count; evalLinkClicked() (v237) opens TenAsys, tells the vendor, closes. */
-var SEAL2_SECONDS = 30;   /* v1252: was 20 (v1249: 10); Assaf, 2026-09-20, twice: ten seconds more to press the registration link */
+var SEAL2_SECONDS = 10;        /* v1255: seconds AFTER the voice has finished (Assaf, 2026-09-25: at least 10) */
+var SEAL2_SILENT_SECONDS = 25; /* v1255: no voice - time to read the screen by eye */
 var SEAL2_TIMER = 0;
 function formSealScreen2(card) {
   if (!card) { return; }
@@ -1789,8 +1790,12 @@ function formSealScreen2(card) {
   var tick = document.createElement('p');
   tick.className = 'sealTick';
   card.appendChild(tick);
+  /* v1255: NO NUMBER (Assaf, 2026-09-25: "the time is not right - instead of stating a time, say the
+     screen will close in a few seconds, at least 10 seconds after the reading of this message ends").
+     The screen and the voice say "in a few seconds"; the page closes SEAL2_SECONDS after the voice is
+     done (SEAL2_SILENT_SECONDS with no voice). */
   var left = SEAL2_SECONDS;
-  tick.textContent = 'If you do nothing, this page closes in ' + left + ' seconds.';
+  tick.textContent = 'If you do nothing, this page closes in a few seconds.';
   /* v1253: THE COUNT STARTS WHEN THE VOICE HAS SAID "THIRTY SECONDS" (Assaf, 2026-09-20). The
      sentence takes about fifteen seconds and that clause is its last; counting from the
      moment the screen appeared made the screen read fifteen while the voice said thirty. So
@@ -1805,10 +1810,7 @@ function formSealScreen2(card) {
     if (guard) { clearTimeout(guard); guard = 0; }
     SEAL2_TIMER = setInterval(function () {
       left -= 1;
-      if (left > 0) {
-        tick.textContent = 'If you do nothing, this page closes in ' + left + (left === 1 ? ' second.' : ' seconds.');
-        return;
-      }
+      if (left > 0) { return; }   /* v1255: counted, not shown */
       clearInterval(SEAL2_TIMER); SEAL2_TIMER = 0;
       tick.textContent = 'Closing this page.';
       try { window.close(); } catch (e) { }
@@ -1826,10 +1828,10 @@ function formSealScreen2(card) {
       ivSay('If you have a licensed eentime and Visual Studio, you can take the solution from the ZIP, build it, '
           + 'change it, and run it. If not, we recommend registering for evaluation eentime: please press the link '
           + 'on screen for the evaluation software and a one month license. '
-          + 'If you do nothing, this page closes in thirty seconds.', startCount);
+          + 'If you do nothing, this page closes in a few seconds.', startCount);
     }
   } catch (e) { }
-  if (!spoken) { startCount(); }
+  if (!spoken) { left = SEAL2_SILENT_SECONDS; startCount(); }
 }
 
 /* v226: the evaluation link carries who he is, and a click leaves a mark in the file.
@@ -13190,7 +13192,7 @@ function downloadTextFile(filename, text, mimeType) {
    cannot be forgotten on the next one. `version: 36` beside it is the SCHEMA
    and says nothing about the HTML; without this, a file that arrives can only
    be dated by guessing from its contents. */
-var FORM_VERSION = 'v1254';
+var FORM_VERSION = 'v1255';
 
 /* v112: emptying the box gives him our summary back on the next press, so
    the edit is reversible without a second control to explain. */
